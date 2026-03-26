@@ -194,7 +194,7 @@ export default function Menu() {
       <CategoryTabs
         categories={categories}
         activeCategory={activeCategory}
-        onCategoryChange={setActiveCategory}
+        onCategoryChange={(id) => setActiveCategory(id as Category)}
       />
 
       {/* Menu Items Grid */}
