@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { KitchenGateway } from '../kitchen/kitchen.gateway';
 import { TableStatus, OrderStatus } from '@prisma/client';
 import { CreateTableDto } from './dto/create-table.dto';
 import { UpdateTableDto } from './dto/update-table.dto';
@@ -13,7 +14,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class TablesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly kitchenGateway: KitchenGateway,
+  ) {}
 
   // -------------------------------------------------------------------------
   // Valid table status transitions (state machine)
@@ -229,6 +233,13 @@ export class TablesService {
       },
     });
 
+    // ── WebSocket: Emit table status change to POS dashboard ──
+    this.kitchenGateway.emitTableStatusChanged(table.restaurantId, {
+      tableId: updated.id,
+      status: updated.status,
+      tableName: updated.name,
+    });
+
     return {
       data: this.formatTable(updated),
     };
@@ -291,6 +302,13 @@ export class TablesService {
       }),
     ]);
 
+    // ── WebSocket: Emit table now occupied ──
+    this.kitchenGateway.emitTableStatusChanged(table.restaurantId, {
+      tableId: updatedTable.id,
+      status: updatedTable.status,
+      tableName: updatedTable.name,
+    });
+
     return {
       data: this.formatTable(updatedTable),
     };
@@ -323,6 +341,13 @@ export class TablesService {
         currentCovers: 0,
         seatedAt: null,
       },
+    });
+
+    // ── WebSocket: Emit table released → CLEANING ──
+    this.kitchenGateway.emitTableStatusChanged(table.restaurantId, {
+      tableId: updated.id,
+      status: updated.status,
+      tableName: updated.name,
     });
 
     return {

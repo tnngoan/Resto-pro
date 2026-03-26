@@ -21,20 +21,20 @@ export enum ExpenseCategory {
 export class CreateExpenseDto {
   @IsString()
   @MinLength(1)
-  description: string;
+  description!: string;
 
   @IsInt()
   @Min(1)
-  amount: number; // VND integer
+  amount!: number; // VND integer
 
   @IsEnum(ExpenseCategory, {
     message:
       'category must be one of: FOOD_PURCHASE, RENT, UTILITIES, STAFF_WAGES, MARKETING, EQUIPMENT, OTHER',
   })
-  category: ExpenseCategory;
+  category!: ExpenseCategory;
 
   @IsDateString()
-  date: string;
+  date!: string;
 
   @IsOptional()
   @IsString()

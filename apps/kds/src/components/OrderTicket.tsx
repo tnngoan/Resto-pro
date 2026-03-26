@@ -132,81 +132,96 @@ export default function OrderTicket({
 
       {/* Items Section - Scrollable */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
-        {order.items.map((item: OrderItem, idx: number) => (
-          <div
-            key={item.id}
-            className={`border-b border-surface-light last:border-0 pb-2 last:pb-0 ${
-              completedItems.has(item.id) ? 'opacity-60' : ''
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              {/* Item details */}
-              <div className="flex-1 min-w-0">
-                {/* Quantity + Name */}
-                <div className="flex items-baseline gap-2 mb-1">
-                  <div className="w-8 h-8 rounded-full bg-gold-500 flex items-center justify-center flex-shrink-0">
-                    <span className="text-xs font-bold text-surface-dark">
-                      {item.quantity}
-                    </span>
+        {order.items.map((item: OrderItem, idx: number) => {
+          // Check if this menu item is 86'd (out of stock)
+          const isItem86d = (item as any).is86d === true;
+
+          return (
+            <div
+              key={item.id}
+              className={`border-b border-surface-light last:border-0 pb-2 last:pb-0 ${
+                completedItems.has(item.id) ? 'opacity-60' : ''
+              } ${isItem86d ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                {/* Item details */}
+                <div className="flex-1 min-w-0">
+                  {/* Quantity + Name */}
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`w-8 h-8 rounded-full ${isItem86d ? 'bg-red-600' : 'bg-gold-500'} flex items-center justify-center flex-shrink-0`}>
+                      <span className="text-xs font-bold text-surface-dark">
+                        {isItem86d ? '✕' : item.quantity}
+                      </span>
+                    </div>
+                    <p
+                      className={`text-sm font-semibold text-primary truncate ${
+                        completedItems.has(item.id) || isItem86d ? 'line-through' : ''
+                      }`}
+                    >
+                      {item.name}
+                    </p>
+                    {/* 86'd badge */}
+                    {isItem86d && (
+                      <span className="text-[10px] px-2 py-0.5 bg-red-600 text-white rounded-full font-bold flex-shrink-0">
+                        HẾT
+                      </span>
+                    )}
                   </div>
-                  <p
-                    className={`text-sm font-semibold text-primary truncate ${
-                      completedItems.has(item.id) ? 'line-through' : ''
-                    }`}
-                  >
-                    {item.name}
-                  </p>
+
+                  {/* English name if available */}
+                  {item.nameIt && (
+                    <p className={`text-xs text-gold-500 italic text-truncate ml-10 mb-1 ${isItem86d ? 'line-through' : ''}`}>
+                      {item.nameIt}
+                    </p>
+                  )}
+
+                  {/* Modifications */}
+                  {item.modifications && item.modifications.length > 0 && (
+                    <div className="ml-10 space-y-0.5">
+                      {item.modifications.map((mod, modIdx) => (
+                        <p key={modIdx} className="text-xs text-secondary italic">
+                          • {mod}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {item.notes && (
+                    <p className="text-xs text-tertiary italic ml-10 mt-1">
+                      Ghi chú: {item.notes}
+                    </p>
+                  )}
                 </div>
 
-                {/* English name if available */}
-                {item.nameIt && (
-                  <p className="text-xs text-gold-500 italic text-truncate ml-10 mb-1">
-                    {item.nameIt}
-                  </p>
-                )}
-
-                {/* Modifications */}
-                {item.modifications && item.modifications.length > 0 && (
-                  <div className="ml-10 space-y-0.5">
-                    {item.modifications.map((mod, modIdx) => (
-                      <p key={modIdx} className="text-xs text-secondary italic">
-                        • {mod}
-                      </p>
-                    ))}
-                  </div>
-                )}
-
-                {/* Notes */}
-                {item.notes && (
-                  <p className="text-xs text-tertiary italic ml-10 mt-1">
-                    Ghi chú: {item.notes}
-                  </p>
-                )}
-              </div>
-
-              {/* Checkbox/Status indicator */}
-              <button
-                onClick={() => handleToggleItem(item.id)}
-                className={`
-                  w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0
-                  font-bold text-xs transition-all
-                  ${
-                    completedItems.has(item.id)
-                      ? 'bg-green-600 text-white'
-                      : 'bg-surface-light text-secondary hover:bg-surface-light'
+                {/* Checkbox/Status indicator */}
+                <button
+                  onClick={() => handleToggleItem(item.id)}
+                  disabled={isItem86d}
+                  className={`
+                    w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0
+                    font-bold text-xs transition-all
+                    ${isItem86d
+                      ? 'bg-red-800 text-red-300 cursor-not-allowed'
+                      : completedItems.has(item.id)
+                        ? 'bg-green-600 text-white'
+                        : 'bg-surface-light text-secondary hover:bg-surface-light'
+                    }
+                  `}
+                  title={
+                    isItem86d
+                      ? 'Món đã hết hàng'
+                      : completedItems.has(item.id)
+                        ? 'Bỏ đánh dấu'
+                        : 'Đánh dấu là xong'
                   }
-                `}
-                title={
-                  completedItems.has(item.id)
-                    ? 'Bỏ đánh dấu'
-                    : 'Đánh dấu là xong'
-                }
-              >
-                {completedItems.has(item.id) ? '✓' : '○'}
-              </button>
+                >
+                  {isItem86d ? '✕' : completedItems.has(item.id) ? '✓' : '○'}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Footer - Bump Button */}

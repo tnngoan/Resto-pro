@@ -2,8 +2,11 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { KitchenGateway } from '../kitchen/kitchen.gateway';
+import { InventoryService } from '../inventory/inventory.service';
 import { CreateOrderDto, OrderItemInput } from './dto/create-order.dto';
 import { AddOrderItemDto } from './dto/add-order-item.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -13,7 +16,13 @@ import { OrderStatus, OrderItemStatus, TableStatus, PaymentMethod } from '@prism
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger('OrdersService');
+
+  constructor(
+    private prisma: PrismaService,
+    private readonly kitchenGateway: KitchenGateway,
+    private readonly inventoryService: InventoryService,
+  ) {}
 
   /**
    * Valid order status transitions
@@ -150,6 +159,34 @@ export class OrdersService {
         },
       });
     }
+
+    // ── WebSocket: Emit order:new so the KDS board shows it immediately ──
+    this.kitchenGateway.emitNewOrder(restaurantId, {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      tableId: order.table?.id,
+      tableName: order.table?.name,
+      items: order.orderItems.map((item: any) => ({
+        id: item.id,
+        name: item.menuItem.name,
+        quantity: item.quantity,
+        notes: item.notes,
+        station: item.menuItem.station,
+        status: item.status,
+      })),
+      placedAt: order.createdAt.toISOString(),
+    });
+
+    // Also emit status_changed for dashboard consistency
+    this.kitchenGateway.emitOrderStatusChanged(restaurantId, {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      tableId: order.table?.id,
+      tableName: order.table?.name,
+      status: OrderStatus.PLACED,
+      previousStatus: 'NEW',
+      updatedAt: order.createdAt.toISOString(),
+    });
 
     return {
       data: this.formatOrder(order),
@@ -316,6 +353,9 @@ export class OrdersService {
       );
     }
 
+    // Capture previous status before the update
+    const previousStatus = order.status;
+
     const updated = await this.prisma.order.update({
       where: { id },
       data: {
@@ -354,6 +394,41 @@ export class OrdersService {
       });
     }
 
+    // ── WebSocket: Emit status change to all relevant rooms ──
+    this.kitchenGateway.emitOrderStatusChanged(updated.restaurantId, {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      tableId: updated.table?.id,
+      tableName: updated.table?.name,
+      status: statusData.status,
+      previousStatus,
+      updatedAt: updated.updatedAt.toISOString(),
+    });
+
+    // ── Inventory: Deduct ingredients when kitchen starts preparing ──
+    // Idempotency guard: only deduct once per order (guards against retries/bugs)
+    if (statusData.status === OrderStatus.PREPARING && !order.inventoryDeducted) {
+      try {
+        await this.deductOrderInventory(updated);
+
+        // Mark order as deducted — prevents double-deduction on retries
+        await this.prisma.order.update({
+          where: { id },
+          data: {
+            inventoryDeducted: true,
+            inventoryDeductedAt: new Date(),
+          },
+        });
+      } catch (error: any) {
+        // CRITICAL: Never block the kitchen for inventory errors.
+        // The order status is already updated — just log and continue.
+        this.logger.error(
+          `Failed to deduct inventory for order ${id}: ${error?.message || error}`,
+          error?.stack,
+        );
+      }
+    }
+
     return {
       data: this.formatOrder(updated),
     };
@@ -390,7 +465,17 @@ export class OrdersService {
       where: { id: item.orderId },
       include: {
         orderItems: true,
+        table: true,
       },
+    });
+
+    // ── WebSocket: Emit item-level status change ──
+    this.kitchenGateway.emitOrderItemStatusChanged(order.restaurantId, {
+      orderId: order.id,
+      orderItemId: updated.id,
+      menuItemName: updated.name || 'Unknown',
+      status,
+      tableId: order.table?.id,
     });
 
     // Auto-update order status if all items are ready
@@ -403,11 +488,24 @@ export class OrdersService {
           oi.status === OrderItemStatus.CANCELLED,
       )
     ) {
+      const previousOrderStatus = order.status;
+
       await this.prisma.order.update({
         where: { id: item.orderId },
         data: {
           status: OrderStatus.READY,
         },
+      });
+
+      // ── WebSocket: Emit auto-READY status change ──
+      this.kitchenGateway.emitOrderStatusChanged(order.restaurantId, {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        tableId: order.table?.id,
+        tableName: order.table?.name,
+        status: OrderStatus.READY,
+        previousStatus: previousOrderStatus,
+        updatedAt: new Date().toISOString(),
       });
     }
 
@@ -501,6 +599,17 @@ export class OrdersService {
       },
     });
 
+    // ── WebSocket: Emit updated order so kitchen sees the new item ──
+    this.kitchenGateway.emitOrderStatusChanged(order.restaurantId, {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      tableId: updated.table?.id,
+      tableName: updated.table?.name,
+      status: updated.status,
+      previousStatus: updated.status, // status didn't change, but items did
+      updatedAt: updated.updatedAt.toISOString(),
+    });
+
     return {
       data: this.formatOrder(updated),
     };
@@ -557,6 +666,17 @@ export class OrdersService {
         },
       });
     }
+
+    // ── WebSocket: Emit cancellation to all rooms ──
+    this.kitchenGateway.emitOrderStatusChanged(updated.restaurantId, {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      tableId: updated.table?.id,
+      tableName: updated.table?.name,
+      status: OrderStatus.CANCELLED,
+      previousStatus: order.status,
+      updatedAt: updated.updatedAt.toISOString(),
+    });
 
     return {
       data: this.formatOrder(updated),
@@ -616,9 +736,129 @@ export class OrdersService {
       });
     }
 
+    // Update daily revenue cache for dashboard
+    await this.updateDailyRevenue(order.restaurantId, updated);
+
+    // ── WebSocket: Emit payment/status change to all rooms ──
+    this.kitchenGateway.emitOrderStatusChanged(updated.restaurantId, {
+      orderId: updated.id,
+      orderNumber: updated.orderNumber,
+      tableId: updated.table?.id,
+      tableName: updated.table?.name,
+      status: OrderStatus.PAID,
+      previousStatus: order.status,
+      updatedAt: updated.updatedAt.toISOString(),
+    });
+
     return {
       data: this.formatOrder(updated),
     };
+  }
+
+  /**
+   * Deduct ingredients for all non-cancelled items in this order.
+   *
+   * CRITICAL BUSINESS RULE: Never block the kitchen.
+   * - Each item deduction is independent — one failure must NOT prevent others.
+   * - Errors are logged but never re-thrown to the caller.
+   * - Manual reconciliation is always better than stopping orders.
+   *
+   * Uses Promise.allSettled so all deductions run in parallel and failures
+   * are isolated per-item.
+   */
+  private async deductOrderInventory(
+    order: { id: string; restaurantId: string; orderItems: Array<{ menuItemId: string; quantity: number; status: string }> },
+  ): Promise<void> {
+    // Filter out cancelled items — they should not consume stock
+    const activeItems = order.orderItems.filter(
+      (item) => item.status !== OrderItemStatus.CANCELLED,
+    );
+
+    if (activeItems.length === 0) {
+      this.logger.warn(`Order ${order.id} has no active items to deduct stock for.`);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      activeItems.map((item) =>
+        this.inventoryService.deductRecipe(
+          item.menuItemId,
+          item.quantity,
+          order.id,
+        ),
+      ),
+    );
+
+    // Log any failures — never throw, kitchen must not be blocked
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const item = activeItems[index];
+        this.logger.error(
+          `Inventory deduction failed for menuItem ${item.menuItemId} ` +
+          `(order ${order.id}, qty ${item.quantity}): ${result.reason?.message || result.reason}`,
+          result.reason?.stack,
+        );
+        // TODO: Emit dashboard alert so staff can reconcile manually
+      }
+    });
+  }
+
+  /**
+   * Upsert DailyRevenue cache record after each payment.
+   * Uses Vietnam timezone (UTC+7) to determine the calendar date.
+   */
+  private async updateDailyRevenue(restaurantId: string, order: any) {
+    // Determine today's date in Vietnam timezone
+    const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+    const dateStr = vnNow.toISOString().slice(0, 10);
+    const date = new Date(dateStr);
+
+    // Build payment method revenue fields
+    const paymentField = this.getPaymentRevenueField(order.paymentMethod);
+
+    await this.prisma.dailyRevenue.upsert({
+      where: {
+        restaurantId_date: { restaurantId, date },
+      },
+      create: {
+        restaurantId,
+        date,
+        totalRevenue: order.total,
+        totalOrders: 1,
+        totalCovers: order.covers || 1,
+        avgTicket: order.total,
+        [paymentField]: order.total,
+        totalVat: order.vatAmount || 0,
+        totalDiscounts: order.discountAmount || 0,
+      },
+      update: {
+        totalRevenue: { increment: order.total },
+        totalOrders: { increment: 1 },
+        totalCovers: { increment: order.covers || 1 },
+        [paymentField]: { increment: order.total },
+        totalVat: { increment: order.vatAmount || 0 },
+        totalDiscounts: { increment: order.discountAmount || 0 },
+        // Recalculate avg ticket after increment
+        // (will be approximate — closePeriod recalculates precisely)
+      },
+    });
+  }
+
+  /**
+   * Maps PaymentMethod enum to the DailyRevenue column name.
+   */
+  private getPaymentRevenueField(
+    method: string | null | undefined,
+  ): string {
+    const map: Record<string, string> = {
+      CASH: 'cashRevenue',
+      VNPAY: 'vnpayRevenue',
+      MOMO: 'momoRevenue',
+      ZALOPAY: 'zalopayRevenue',
+      CARD: 'cardRevenue',
+      BANK_TRANSFER: 'bankTransferRevenue',
+    };
+    return map[method || 'CASH'] || 'cashRevenue';
   }
 
   /**

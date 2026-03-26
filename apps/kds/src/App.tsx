@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { KitchenStation, KITCHEN_STATION_LABELS } from '@restopro/shared';
 import TopBar from './components/TopBar';
 import KDSKanban from './components/KDSKanban';
+import EightySixSidebar from './components/EightySixSidebar';
+import { use86dItems } from './hooks/use86dItems';
+
+// TODO: In production, get from auth context or URL param
+const RESTAURANT_ID = import.meta.env.VITE_RESTAURANT_ID || 'demo-restaurant';
 
 /**
  * Kitchen Display System (KDS) Main Application
@@ -24,6 +29,7 @@ export default function App(): React.ReactElement {
   const [selectedStation, setSelectedStation] = useState<KitchenStation | null>(null);
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const { items86d, isConnected: wsConnected } = use86dItems(RESTAURANT_ID);
 
   // Update clock every second for smooth time display
   React.useEffect(() => {
@@ -87,8 +93,14 @@ export default function App(): React.ReactElement {
         ))}
       </div>
 
-      {/* Kanban Board: 3-column layout with orders */}
-      <KDSKanban selectedStation={selectedStation} />
+      {/* Main content area: Kanban + 86 sidebar */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Kanban Board: 3-column layout with orders */}
+        <KDSKanban selectedStation={selectedStation} />
+
+        {/* 86'd items sidebar — only visible when items are out of stock */}
+        <EightySixSidebar items={items86d} />
+      </div>
     </div>
   );
 }

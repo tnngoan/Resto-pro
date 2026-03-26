@@ -10,10 +10,10 @@ import { Type } from 'class-transformer';
 
 export class RevenueQueryDto {
   @IsDateString()
-  startDate: string;
+  startDate!: string;
 
   @IsDateString()
-  endDate: string;
+  endDate!: string;
 
   @IsOptional()
   @IsEnum(['day', 'week', 'month'], {

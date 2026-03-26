@@ -5,3 +5,4 @@
 export { default as TopBar } from './TopBar';
 export { default as KDSKanban } from './KDSKanban';
 export { default as OrderTicket } from './OrderTicket';
+export { default as EightySixSidebar } from './EightySixSidebar';

@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Param,
   Body,
   UseGuards,
   Query,
@@ -12,6 +11,8 @@ import { RolesGuard } from '@/common/guards/roles.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { FinanceService } from './finance.service';
+import { RevenueQueryDto } from './dto/revenue-query.dto';
+import { CreateExpenseDto } from './dto/expense.dto';
 
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -24,7 +25,13 @@ export class FinanceController {
     @Query('date') date: string,
     @CurrentUser() user: any,
   ) {
-    return this.financeService.getDailySummary(user.restaurantId, date);
+    // Default to today (Vietnam time) if no date provided
+    const effectiveDate =
+      date || new Date().toISOString().slice(0, 10);
+    return this.financeService.getDailySummary(
+      user.restaurantId,
+      effectiveDate,
+    );
   }
 
   @Get('revenue-trends')
@@ -32,12 +39,14 @@ export class FinanceController {
   async getRevenueTrends(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('granularity') granularity: 'day' | 'week' | 'month' = 'day',
     @CurrentUser() user: any,
   ) {
     return this.financeService.getRevenueTrends(
       user.restaurantId,
       startDate,
       endDate,
+      granularity,
     );
   }
 
@@ -58,10 +67,17 @@ export class FinanceController {
   @Get('top-items')
   @Roles('OWNER', 'MANAGER')
   async getTopItems(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
     @Query('limit') limit: number = 10,
     @CurrentUser() user: any,
   ) {
-    return this.financeService.getTopItems(user.restaurantId, limit);
+    return this.financeService.getTopItems(
+      user.restaurantId,
+      startDate,
+      endDate,
+      limit,
+    );
   }
 
   @Get('expenses')
@@ -81,16 +97,28 @@ export class FinanceController {
   @Post('expenses')
   @Roles('OWNER', 'MANAGER')
   async recordExpense(
-    @Body() expenseDto: any,
+    @Body() expenseDto: CreateExpenseDto,
     @CurrentUser() user: any,
   ) {
-    return this.financeService.recordExpense(user.restaurantId, expenseDto);
+    return this.financeService.recordExpense(
+      user.restaurantId,
+      expenseDto,
+      user.id,
+    );
   }
 
   @Get('trial-balance')
   @Roles('OWNER', 'MANAGER')
-  async getTrialBalance(@CurrentUser() user: any) {
-    return this.financeService.getTrialBalance(user.restaurantId);
+  async getTrialBalance(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.financeService.getTrialBalance(
+      user.restaurantId,
+      startDate,
+      endDate,
+    );
   }
 
   @Post('close-period')

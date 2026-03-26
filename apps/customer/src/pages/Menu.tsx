@@ -6,6 +6,10 @@ import CategoryTabs from '@/components/CategoryTabs';
 import MenuItemCard from '@/components/MenuItemCard';
 import CartBar from '@/components/CartBar';
 import { formatPriceShort } from '@/lib/format';
+import { useMenu86d } from '@/hooks/useMenu86d';
+
+// TODO: In production, get restaurantId from URL or context
+const RESTAURANT_ID = import.meta.env.VITE_RESTAURANT_ID || 'demo-restaurant';
 
 type Category = 'khai-vi' | 'pizza' | 'pasta' | 'thit-ca' | 'trang-mieng' | 'do-uong' | 'ruou-vang';
 
@@ -133,6 +137,9 @@ export default function Menu() {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<Category>('pizza');
 
+  // Real-time 86'd items via WebSocket
+  const { items86d } = useMenu86d(RESTAURANT_ID, tableSlug);
+
   const cartStore = useCartStore();
   const cartTotal = cartStore.getSubtotal();
   const cartCount = cartStore.getItemCount();
@@ -193,18 +200,22 @@ export default function Menu() {
       {/* Menu Items Grid */}
       <div className="px-6 py-8">
         <motion.div layout className="grid grid-cols-1 gap-4">
-          {filteredItems.map((item) => (
-            <MenuItemCard
-              key={item.id}
-              id={item.id}
-              name={item.name}
-              description={item.description}
-              price={item.price}
-              spicy={item.spicy}
-              onTap={handleItemTap}
-              onAddToCart={() => handleAddToCart(item)}
-            />
-          ))}
+          {filteredItems.map((item) => {
+            const is86d = items86d.has(item.id);
+            return (
+              <MenuItemCard
+                key={item.id}
+                id={item.id}
+                name={item.name}
+                description={item.description}
+                price={item.price}
+                spicy={item.spicy}
+                is86d={is86d}
+                onTap={is86d ? undefined : handleItemTap}
+                onAddToCart={is86d ? undefined : () => handleAddToCart(item)}
+              />
+            );
+          })}
         </motion.div>
       </div>
 

@@ -1,6 +1,10 @@
 import { Outlet } from 'react-router-dom';
-import { Bell, User } from 'lucide-react';
+import { User } from 'lucide-react';
 import Sidebar from './Sidebar';
+import AlertBell from '@/features/alerts/components/AlertBell';
+
+// TODO: In production, get this from auth context / user session
+const RESTAURANT_ID = import.meta.env.VITE_RESTAURANT_ID || 'demo-restaurant';
 
 export default function DashboardLayout() {
   return (
@@ -18,11 +22,8 @@ export default function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-6">
-            {/* Notifications */}
-            <button className="text-text-secondary hover:text-gold transition-colors relative">
-              <Bell size={20} />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span>
-            </button>
+            {/* Notifications — real-time WebSocket alerts */}
+            <AlertBell restaurantId={RESTAURANT_ID} />
 
             {/* User Profile */}
             <div className="flex items-center gap-3 pl-6 border-l border-surface-light">

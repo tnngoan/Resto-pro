@@ -20,6 +20,19 @@ import { ReportsService } from './reports.service';
 export class ReportsController {
   constructor(private reportsService: ReportsService) {}
 
+  @Get('daily')
+  @Roles('OWNER', 'MANAGER')
+  async getDailyReport(
+    @Query('date') date: string,
+    @CurrentUser() user: any,
+  ) {
+    const effectiveDate = date || new Date().toISOString().slice(0, 10);
+    return this.reportsService.generateDailyReport(
+      user.restaurantId,
+      effectiveDate,
+    );
+  }
+
   @Get('profit-and-loss')
   @Roles('OWNER', 'MANAGER')
   async getProfitAndLoss(
@@ -106,7 +119,15 @@ export class ReportsController {
     @Body('format') format: string,
     @Res() res: Response,
   ) {
-    const exportedData = await this.reportsService.exportReport(reportData, format);
-    return res.send(exportedData);
+    const exported = await this.reportsService.exportReport(
+      reportData,
+      format,
+    );
+    res.setHeader('Content-Type', exported.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${exported.filename}"`,
+    );
+    return res.send(exported.data);
   }
 }

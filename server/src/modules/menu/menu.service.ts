@@ -2,8 +2,10 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/common/prisma/prisma.service';
+import { KitchenGateway } from '../kitchen/kitchen.gateway';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -12,7 +14,12 @@ import { MenuQueryDto } from './dto/menu-query.dto';
 
 @Injectable()
 export class MenuService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger('MenuService');
+
+  constructor(
+    private prisma: PrismaService,
+    private kitchenGateway: KitchenGateway,
+  ) {}
 
   /**
    * Get all active categories with item count, sorted by sortOrder
@@ -343,7 +350,8 @@ export class MenuService {
   }
 
   /**
-   * Mark item as 86'd (out of stock)
+   * Mark item as 86'd (out of stock) or un-86 it.
+   * Broadcasts WebSocket event to all connected clients (KDS, customer PWA, dashboard).
    */
   async mark86d(id: string, is86d: boolean) {
     const item = await this.prisma.menuItem.findUnique({
@@ -358,6 +366,22 @@ export class MenuService {
       where: { id },
       data: { is86d },
     });
+
+    // Broadcast 86d or un-86 event via WebSocket
+    if (is86d) {
+      this.kitchenGateway.emit86dAlert(item.restaurantId, {
+        menuItemId: updated.id,
+        menuItemName: updated.name,
+        reason: 'Nhân viên đánh dấu hết hàng', // "Staff marked as out of stock"
+      });
+      this.logger.log(`Menu item "${updated.name}" marked as 86'd by staff`);
+    } else {
+      this.kitchenGateway.emitItemAvailable(item.restaurantId, {
+        menuItemId: updated.id,
+        menuItemName: updated.name,
+      });
+      this.logger.log(`Menu item "${updated.name}" un-86'd by staff`);
+    }
 
     return {
       data: {
