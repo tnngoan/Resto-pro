@@ -16,7 +16,8 @@
     "zustand": "^4.4.0",
     "lucide-react": "^0.292.0",
     "framer-motion": "^10.16.0",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
     "vite": "^5.0.0",

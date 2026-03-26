@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm turbo run build --filter=@restopro/customer",
+  "outputDirectory": "apps/customer/dist",
+  "framework": "vite"
+}
