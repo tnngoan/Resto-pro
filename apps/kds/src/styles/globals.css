@@ -1,0 +1,157 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', sans-serif;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #1a1a1a;
+  color: #f5f5f5;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Scrollbar styling - kitchen-optimized dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #242424;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f3f;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4f4f4f;
+}
+
+/* Focus styles */
+:focus-visible {
+  outline: 2px solid #ffb700;
+  outline-offset: 2px;
+}
+
+/* Utility classes */
+@layer components {
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+
+  .flex-between {
+    @apply flex items-center justify-between;
+  }
+
+  .text-truncate {
+    @apply truncate;
+  }
+
+  .text-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .touch-highlight-transparent {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Kitchen Display System specific animations */
+@layer utilities {
+  /* Critical urgency pulse: faster, more intense */
+  .animate-pulse-critical {
+    animation: pulse-critical 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-critical {
+    0%,
+    100% {
+      opacity: 1;
+      box-shadow: 0 0 0 0 rgba(201, 68, 68, 0.7);
+    }
+    50% {
+      opacity: 0.7;
+      box-shadow: 0 0 0 4px rgba(201, 68, 68, 0);
+    }
+  }
+
+  /* Urgent warning pulse */
+  .animate-pulse-warning {
+    animation: pulse-warning 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-warning {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+}
+
+/* Responsive adjustments for touch devices */
+@media (max-width: 1920px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+/* Disable text selection on KDS for better UX */
+.kds-container {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Ensure buttons are touch-friendly */
+button {
+  min-height: 48px;
+  /* Prevents accidental selection on touch */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+}
+
+/* Prevent pinch-zoom on touch devices */
+body {
+  touch-action: manipulation;
+}
+
+/* Smooth scrolling in order cards */
+.order-items-container {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Print styles - in case kitchen needs to print orders */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+
+  .no-print {
+    display: none;
+  }
+}
