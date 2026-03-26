@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "skipDefaultLibCheck": true,
     "resolveJsonModule": true,
+    "types": ["vite/client"],
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "jsx": "react-jsx",
